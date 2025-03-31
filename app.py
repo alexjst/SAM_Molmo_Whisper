@@ -649,4 +649,10 @@ if __name__ == '__main__':
     #     ]
     # )
     
-    iface.launch(share=True)
+    #iface.launch(share=False)
+    iface.launch(
+        root_path="/notebook/kubeflow-snd/ayang-modemate-rag-model/proxy/7860/",
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=False
+    )
