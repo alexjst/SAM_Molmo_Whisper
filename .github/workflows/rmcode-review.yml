@@ -1,0 +1,76 @@
+name: RMCode Review
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        required: true
+        type: string
+      base_sha:
+        required: true
+        type: string
+      diff_url:
+        required: true
+        type: string
+      callback_url:
+        required: true
+        type: string
+      auth_token:
+        required: true
+        type: string
+      version:
+        required: false
+        type: string
+        default: 'v1.0.0'
+      extractor_sha256:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  extract-context:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Mask sensitive inputs
+        run: |
+          echo "::add-mask::${{ inputs.auth_token }}"
+          echo "::add-mask::${{ inputs.callback_url }}"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+
+      - name: Download extractor
+        run: |
+          curl --fail --location --show-error --silent \
+            "https://storage.googleapis.com/rmcode-releases/extractor/${{ inputs.version }}/extractor.mjs" \
+            --output extractor.mjs
+          printf '%s  extractor.mjs\n' '${{ inputs.extractor_sha256 }}' > extractor.mjs.sha256
+          sha256sum -c extractor.mjs.sha256
+
+      - name: Download diff
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          curl --fail --location --show-error --silent \
+            "${{ inputs.diff_url }}" \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3.diff" \
+            --output pr.diff
+          echo "Diff size: $(wc -c < pr.diff) bytes"
+
+      - name: Extract context and send to API
+        run: |
+          node extractor.mjs \
+            --pr="${{ inputs.pr_number }}" \
+            --diff-file=pr.diff \
+            --callback="${{ inputs.callback_url }}" \
+            --token="${{ inputs.auth_token }}"
